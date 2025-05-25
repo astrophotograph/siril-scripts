@@ -5,6 +5,9 @@
 #
 # Version history:
 #
+# todo:
+# -dark=filename, -flat=filename, -cc=dark
+#
 from threading import Thread
 
 INSIDE_SIRIL = False
