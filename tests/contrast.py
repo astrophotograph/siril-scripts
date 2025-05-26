@@ -1,7 +1,10 @@
+import logging
+
 import cv2
 import numpy as np
 import argparse
 from pathlib import Path
+from scipy.interpolate import CubicSpline
 
 def adjust_contrast(image_path, method='linear', params=None, output_path=None):
     """
@@ -14,6 +17,7 @@ def adjust_contrast(image_path, method='linear', params=None, output_path=None):
             - 'sigmoid': Sigmoid function for smoother contrast
             - 'gamma': Gamma correction
             - 'equalize': Histogram equalization
+            - 'cubic_spline': Cubic spline interpolation for custom mapping
         params (dict): Parameters for the selected method
         output_path (str, optional): Path to save the adjusted image. If None,
             will save as 'input_name_contrast.tif' in the same directory.
@@ -122,6 +126,48 @@ def adjust_contrast(image_path, method='linear', params=None, output_path=None):
             min_val = np.min(img_float)
             max_val = np.max(img_float)
             adjusted = adjusted / 255.0 * (max_val - min_val) + min_val
+            
+    elif method == 'cubic_spline':
+        print(f"Params: {params}")
+        if params is None or len(params) == 0:
+            # Default control points for the cubic spline
+            # Format: (x, y) where x is input value and y is output value
+            # Both x and y are in normalized [0, 1] range
+            params = {
+                'control_points': [
+                    (0.0, 0.0),    # Shadows (inputs 0% -> outputs 0%)
+                    (0.25, 0.15),  # Dark mid-tones (inputs 25% -> outputs 15%)
+                    (0.5, 0.5),    # Mid-tones (inputs 50% -> outputs 50%)
+                    (0.75, 0.85),  # Light mid-tones (inputs 75% -> outputs 85%)
+                    (1.0, 1.0)     # Highlights (inputs 100% -> outputs 100%)
+                ]
+            }
+        
+        # Normalize to 0-1 range
+        min_val = np.min(img_float)
+        max_val = np.max(img_float)
+        
+        if max_val > min_val:
+            normalized = (img_float - min_val) / (max_val - min_val)
+        else:
+            normalized = img_float
+        
+        # Extract x and y values from control points
+        x_points = np.array([point[0] for point in params['control_points']])
+        y_points = np.array([point[1] for point in params['control_points']])
+        
+        # Create cubic spline function
+        cs = CubicSpline(x_points, y_points)
+        
+        # Apply the spline function to each pixel
+        adjusted = cs(normalized)
+        
+        # Clip to [0, 1] range
+        adjusted = np.clip(adjusted, 0, 1)
+        
+        # Scale back to original range
+        adjusted = adjusted * (max_val - min_val) + min_val
+        
     else:
         raise ValueError(f"Unknown contrast adjustment method: {method}")
     
@@ -147,7 +193,7 @@ def main():
     parser = argparse.ArgumentParser(description='Adjust contrast of a TIF image')
     parser.add_argument('image', type=str, help='Path to the TIF image')
     parser.add_argument('--method', type=str, default='linear', 
-                      choices=['linear', 'sigmoid', 'gamma', 'equalize'],
+                      choices=['linear', 'sigmoid', 'gamma', 'equalize', 'cubic_spline'],
                       help='Method for contrast adjustment')
     parser.add_argument('--alpha', type=float, default=1.5, 
                       help='Contrast factor for linear method')
@@ -159,6 +205,8 @@ def main():
                       help='Cutoff value for sigmoid method')
     parser.add_argument('--gamma', type=float, default=0.5, 
                       help='Gamma value for gamma correction')
+    parser.add_argument('--control-points', type=str, default=None,
+                      help='Control points for cubic spline in format "x1,y1;x2,y2;x3,y3;..." (values between 0-1)')
     parser.add_argument('--output', type=str, help='Output path (optional)')
     
     args = parser.parse_args()
@@ -171,12 +219,25 @@ def main():
         params = {'gain': args.gain, 'cutoff': args.cutoff}
     elif args.method == 'gamma':
         params = {'gamma': args.gamma}
+    elif args.method == 'cubic_spline' and args.control_points:
+        # Parse control points from command line
+        try:
+            points_list = []
+            point_pairs = args.control_points.split(';')
+            for pair in point_pairs:
+                x, y = map(float, pair.split(','))
+                points_list.append((x, y))
+            params = {'control_points': points_list}
+        except Exception as e:
+            print(f"Error parsing control points: {e}")
+            print("Using default control points instead.")
+            params = None
     
     try:
         output_path = adjust_contrast(args.image, args.method, params, args.output)
         print(f"Saved contrast-adjusted image to {output_path}")
     except Exception as e:
-        print(f"Error: {e}")
+        logging.exception(f"Error: {e}")
 
 if __name__ == "__main__":
     main()

@@ -9,6 +9,7 @@
 # -dark=filename, -flat=filename, -cc=dark
 #
 from threading import Thread
+from time import sleep
 
 INSIDE_SIRIL = False
 NAME = "Stackinator"
@@ -150,10 +151,13 @@ class Stackinator:
 
     def _update_status(self, text: str) -> None:
         """Update the status bar."""
-        if self.root and INSIDE_SIRIL:
+        if self.root:
             self.status.config(text=text)
-        else:
-            slog(text)
+        slog(text)
+
+        if not INSIDE_SIRIL:
+            # for debugging only
+            sleep(2)
 
     def process_sequence(self):
         """Stack subframes."""

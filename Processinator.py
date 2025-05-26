@@ -24,6 +24,7 @@
 # - heuristics for Bortle
 # - heuristics for phase of moon
 #
+from pathlib import Path
 from threading import Thread
 from time import sleep
 import os
@@ -43,10 +44,12 @@ from tkinter import ttk, Frame
 if INSIDE_SIRIL:
     s.ensure_installed("ttkthemes")
     s.ensure_installed("opencv-python")
+    s.ensure_installed("scipy")
 
 from ttkthemes import ThemedTk
 import cv2
 import numpy as np
+from scipy.interpolate import CubicSpline
 
 slog = partial(print, f'{NAME}:')
 
@@ -151,17 +154,17 @@ class Processinator:
             self.close_button["state"] = tk.DISABLED
             self.process_button["state"] = tk.DISABLED
             self.unclip()
-            # self.background_extraction()
-            # self.plate_solve()
-            # self.crop()
-            # self.color_calibration()
-            # self.star_separation()
-            # self.stretch()
-            # self.star_recombination()
-            # self.remove_green()
-            # # self.denoise()
+            self.background_extraction()
+            self.plate_solve()
+            self.crop()
+            self.color_calibration()
+            self.star_separation()
+            self.stretch()
+            self.star_recombination()
+            self.remove_green()
             self.curves()
             self.adjustments()
+            # self.denoise()
             # self.sharpen()
             self.save_result()
         finally:
@@ -191,6 +194,7 @@ class Processinator:
                            "-smooth=0.5")
 
         self.steps.append("BE")
+        self._save_state()
 
     def plate_solve(self):
         """Plate solve."""
@@ -201,6 +205,7 @@ class Processinator:
             #  -blindpos, -blindres ?
 
         self.steps.append("PS")
+        self._save_state()
 
     def color_calibration(self):
         """Color calibration."""
@@ -214,6 +219,7 @@ class Processinator:
                            "\"-oscfilter=UV/IR Block\"")
 
         self.steps.append("SPCC")
+        self._save_state()
 
     def crop(self):
         """Crop image."""
@@ -235,6 +241,7 @@ class Processinator:
                            self.height - 2 * h_delta)
 
         self.steps.append("CR")
+        self._save_state()
 
     def star_separation(self):
         """Star separation."""
@@ -246,6 +253,7 @@ class Processinator:
             self.siril.cmd("load", "starless_result")
 
         self.steps.append("StarSep")
+        self._save_state()
 
     def star_recombination(self):
         """Star recombination."""
@@ -270,6 +278,7 @@ class Processinator:
                            "\"$starless_result$ + $starmask_result$\"")
 
         self.steps.append("StarComb")
+        self._save_state()
 
     def remove_green(self):
         """Remove green."""
@@ -279,6 +288,7 @@ class Processinator:
             self.siril.cmd("rmgreen")
 
         self.steps.append("DG")
+        self._save_state()
 
     def stretch(self):
         """Stretch the image."""
@@ -289,52 +299,95 @@ class Processinator:
             self.siril.cmd("autostretch", "-2.8", "0.20")
 
         self.steps.append("ST")
+        self._save_state()
 
     def denoise(self):
         """Denoise."""
         self._update_status("Denoise")
 
         if INSIDE_SIRIL:
-            self.siril.cmd("denoise", "-mod=0.5")
+            # self.siril.cmd("denoise", "-mod=0.5")
+            self.steps.append("DN")
+            self.siril.cmd("pyscript",
+                           "CosmicClarity_Denoise.py")
+            self._save_state()
 
-        self.steps.append("DN")
 
     def sharpen(self):
         """Sharpen."""
         self._update_status("Sharpen")
 
         if INSIDE_SIRIL:
+            self.steps.append("SH")
             self.siril.cmd("pyscript",
                            "CosmicClarity_Sharpen.py")
+            self._save_state()
 
-        self.steps.append("SH")
 
     def curves(self):
         """Curves."""
         self._update_status("Curves")
 
-        self._save_tiff(self._current_file_name())
+        self._save_tiff(self._current_file_name(''))
 
-        # Apply curve using OpenCV
-        img = cv2.imread(f"{self._current_file_name()}.tif")
-        slog(f"Image: {img} current file name: {self._current_file_name()}")
+        # Apply the curve using OpenCV
+        img = cv2.imread(self._current_file_name('.tif'), cv2.IMREAD_UNCHANGED)
         if INSIDE_SIRIL and img is None:
             self.siril.error_messagebox("Failed to load image")
             return
-        r1 = 70
-        s1 = 0
-        r2 = 140
-        s2 = 255
-        pixelVal_vec = np.vectorize(pixelVal)
-        contrast_stretched = pixelVal_vec(img, r1, s1, r2, s2)
+
+        # Get the image data type to preserve it
+        original_dtype = img.dtype
+
+        # Convert to float for processing
+        img_float = img.astype(np.float32)
+
+
+        # Normalize to 0-1 range
+        min_val = np.min(img_float)
+        max_val = np.max(img_float)
+
+        if max_val > min_val:
+            normalized = (img_float - min_val) / (max_val - min_val)
+        else:
+            normalized = img_float
+
+        control_points = [
+            (0.0, 0.0),
+            (0.07, 0.035), # Pull down shadows
+            (0.6, 0.75),   # Boost mid to light mid-tones
+            (1.0, 1.0)
+        ]
+        # Extract x and y values from control points
+        x_points = np.array([point[0] for point in control_points])
+        y_points = np.array([point[1] for point in control_points])
+
+        # Create cubic spline function
+        cs = CubicSpline(x_points, y_points)
+
+        # Apply the spline function to each pixel
+        adjusted = cs(normalized)
+
+        # Clip to [0, 1] range
+        adjusted = np.clip(adjusted, 0, 1)
+
+        # Scale back to original range
+        adjusted = adjusted * (max_val - min_val) + min_val
+
+        # Convert back to original data type
+        if original_dtype == np.uint8:
+            adjusted = np.clip(adjusted, 0, 255).astype(np.uint8)
+        elif original_dtype == np.uint16:
+            adjusted = np.clip(adjusted, 0, 65535).astype(np.uint16)
+        else:
+            adjusted = adjusted.astype(original_dtype)
 
         self.steps.append("Curves")
 
-        in_file = f"{self._current_file_name()}.png"
-        cv2.imwrite(in_file, contrast_stretched)
+        cv2.imwrite(self._current_file_name('.tif'), adjusted)
 
         if INSIDE_SIRIL:
-            self.siril.cmd("load", in_file)
+            self.siril.cmd("load", f'"{self._current_file_name('.tif')}"')
 
     def adjustments(self):
         """Perform a variety of adjustments, including CLAHE."""
@@ -346,16 +399,19 @@ class Processinator:
             #self.siril.cmd("clahe", "8", "2")
 
         self.steps.append("Adj")
+        self._save_state()
 
     def save_result(self):
         """Save the result file, including step suffix."""
         self._save_state()
 
-    def _current_file_name(self):
+    def _current_file_name(self, suffix: str | None = None) -> str:
         """Return the current file name."""
-        file_name = self.current_file.replace(".fit", "")
-        file_name = f"{file_name}_{'_'.join(self.steps)}.fit"
-        return file_name
+        steps = '_'.join(self.steps)
+        input_path = Path(self.current_file)
+        extension = suffix if suffix is not None else input_path.suffix
+        output_path = input_path.parent / f"{input_path.stem}_{steps}{extension}"
+        return str(output_path)
 
     def _save_state(self):
         """Save the current state of the image."""
