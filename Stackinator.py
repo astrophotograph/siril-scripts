@@ -11,7 +11,7 @@
 from threading import Thread
 from time import sleep
 
-INSIDE_SIRIL = False
+INSIDE_SIRIL = True
 NAME = "Stackinator"
 
 if INSIDE_SIRIL:
@@ -69,11 +69,9 @@ class Stackinator:
                 raise RuntimeError('Failed to connect to Siril')
 
             # todo : check for "process" directory and error if it exists!
+            tksiril.match_theme_to_siril(self.root, self.siril)
 
         self._create_ui()
-
-        if INSIDE_SIRIL:
-            tksiril.match_theme_to_siril(self.root, self.siril)
 
     def error(self, msg: str) -> None:
         """Display an error message."""
@@ -91,8 +89,8 @@ class Stackinator:
 
     def _create_ui(self):
         """Create the UI."""
-        main = Frame(self.root)
-        main.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        main = ttk.Frame(self.root, padding=10)
+        main.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
 
         title = ttk.Label(main,
                           text=NAME,
@@ -102,19 +100,19 @@ class Stackinator:
         title.pack(pady=(0, 20))
 
         # Parameters
-        drizzle = tk.Checkbutton(main,
-                                 text="Drizzle",
-                                 variable=self.drizzle,
-                                 height=2,
-                                 width=10,
-                                 onvalue=True,
-                                 offvalue=False,
-                                 command=self.on_drizzle_change
-                                 )
+        drizzle = ttk.Checkbutton(main,
+                                  text="Drizzle",
+                                  variable=self.drizzle,
+                                  # height=2,
+                                  width=10,
+                                  onvalue=True,
+                                  offvalue=False,
+                                  command=self.on_drizzle_change
+                                  )
         drizzle.pack(pady=(0, 20))
         self.drizzle.set(True)
 
-        kernel_box = Frame(main)
+        kernel_box = ttk.Frame(main)
         kernel_label = ttk.Label(kernel_box, text="Kernel")
         kernel_label.pack(side=tk.LEFT)
         self.kernel_combo = ttk.Combobox(kernel_box, values=self.kernels)
@@ -133,7 +131,7 @@ class Stackinator:
         kernel_box.pack(pady=(0, 10))
 
         # Buttons
-        buttons = Frame(main)
+        buttons = ttk.Frame(main)
         buttons.pack(pady=(0, 10))
         self.stack_button = ttk.Button(buttons, text="Stack", command=self.process_sequence)
         self.stack_button.pack(side=tk.RIGHT)

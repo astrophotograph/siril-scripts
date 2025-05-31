@@ -53,16 +53,6 @@ from scipy.interpolate import CubicSpline
 
 slog = partial(print, f'{NAME}:')
 
-# Function to map each intensity level to output intensity level.
-MAX_VALUE = 65535
-def pixelVal(pix, r1, s1, r2, s2):
-    if 0 <= pix and pix <= r1:
-        return (s1 / r1)*pix
-    elif r1 < pix and pix <= r2:
-        return ((s2 - s1)/(r2 - r1)) * (pix - r1) + s1
-    else:
-        return ((MAX_VALUE - s2)/(MAX_VALUE - r2)) * (pix - r2) + s2
-
 class Processinator:
     """Processinator."""
 
@@ -76,6 +66,7 @@ class Processinator:
         self.steps = []
         self.width = None
         self.height = None
+        self.save_each_step = True
 
         if INSIDE_SIRIL:
             self.style = tksiril.standard_style()
@@ -154,19 +145,19 @@ class Processinator:
             self.close_button["state"] = tk.DISABLED
             self.process_button["state"] = tk.DISABLED
             self.unclip()
-            self.background_extraction()
+            self.crop(0.01)
+            # self.background_extraction(tolerance=2.0)
             self.plate_solve()
-            self.crop()
             self.color_calibration()
-            self.star_separation()
+            # # self.star_separation()
             self.stretch()
-            self.star_recombination()
+            # # self.star_recombination(8.5)
             self.remove_green()
-            self.curves()
+            # self.curves()
             self.adjustments()
-            # self.denoise()
-            # self.sharpen()
-            self.save_result()
+            self.denoise()
+            self.sharpen()
+            # self.save_result()
         finally:
             self.close_button["state"] = tk.NORMAL
             self.process_button["state"] = tk.NORMAL
@@ -180,8 +171,10 @@ class Processinator:
             self.siril.cmd("unclipstars")
 
         self.steps.append("UC")
+        if self.save_each_step:
+            self._save_state()
 
-    def background_extraction(self):
+    def background_extraction(self, samples:int = 20, tolerance:float = 3.0, smooth:float = 0.5):
         """Background extraction."""
         self._update_status("Background extraction")
 
@@ -189,12 +182,13 @@ class Processinator:
             self.siril.cmd("subsky",
                            "-rbf",
                            "-dither",
-                           "-samples=20",
-                           "-tolerance=3.0", # Higher for higher gradient?
-                           "-smooth=0.5")
+                           f"-samples={samples}",
+                           f"-tolerance={tolerance}", # Higher for higher gradient?
+                           f"-smooth={smooth}")
 
         self.steps.append("BE")
-        self._save_state()
+        if self.save_each_step:
+            self._save_state()
 
     def plate_solve(self):
         """Plate solve."""
@@ -205,7 +199,8 @@ class Processinator:
             #  -blindpos, -blindres ?
 
         self.steps.append("PS")
-        self._save_state()
+        if self.save_each_step:
+            self._save_state()
 
     def color_calibration(self):
         """Color calibration."""
@@ -219,9 +214,10 @@ class Processinator:
                            "\"-oscfilter=UV/IR Block\"")
 
         self.steps.append("SPCC")
-        self._save_state()
+        if self.save_each_step:
+            self._save_state()
 
-    def crop(self):
+    def crop(self, pct: float = 0.07):
         """Crop image."""
         # todo : make this intelligent.  crop based on noise?
         self._update_status("Crop")
@@ -230,7 +226,6 @@ class Processinator:
             # Get the size of the image, and crop 5% from each side...
             _channels, self.height, self.width = self.siril.get_image_shape()
 
-            pct = 0.07
             h_delta = pct * self.height
             w_delta = pct * self.width
 
@@ -241,7 +236,8 @@ class Processinator:
                            self.height - 2 * h_delta)
 
         self.steps.append("CR")
-        self._save_state()
+        if self.save_each_step:
+            self._save_state()
 
     def star_separation(self):
         """Star separation."""
@@ -253,9 +249,10 @@ class Processinator:
             self.siril.cmd("load", "starless_result")
 
         self.steps.append("StarSep")
-        self._save_state()
+        if self.save_each_step:
+            self._save_state()
 
-    def star_recombination(self):
+    def star_recombination(self, strength:float = 7.5):
         """Star recombination."""
         self._update_status("Star recombination")
 
@@ -271,14 +268,15 @@ class Processinator:
             slog(f"Original name '{self.current_file}' new name '{starmask}'")
 
             self.siril.cmd("load", f'"{starmask}"')
-            self.siril.cmd("modasinh", "-human", "-D=7.5")
+            self.siril.cmd("modasinh", "-human", f"-D={strength}")
             self.siril.cmd("save", "starmask_result")
             # Use pixelmath to recombine.
             self.siril.cmd("pm",
                            "\"$starless_result$ + $starmask_result$\"")
 
         self.steps.append("StarComb")
-        self._save_state()
+        if self.save_each_step:
+            self._save_state()
 
     def remove_green(self):
         """Remove green."""
@@ -288,18 +286,20 @@ class Processinator:
             self.siril.cmd("rmgreen")
 
         self.steps.append("DG")
-        self._save_state()
+        if self.save_each_step:
+            self._save_state()
 
-    def stretch(self):
+    def stretch(self, shadows_clip:float = -2.8, target_bg:float = 0.20):
         """Stretch the image."""
         self._update_status("Stretch")
 
         if INSIDE_SIRIL:
             # last parameter is average brightness
-            self.siril.cmd("autostretch", "-2.8", "0.20")
+            self.siril.cmd("autostretch", str(shadows_clip), str(target_bg))
 
         self.steps.append("ST")
-        self._save_state()
+        if self.save_each_step:
+            self._save_state()
 
     def denoise(self):
         """Denoise."""
@@ -310,7 +310,8 @@ class Processinator:
             self.steps.append("DN")
             self.siril.cmd("pyscript",
                            "CosmicClarity_Denoise.py")
-            self._save_state()
+            if self.save_each_step:
+                self._save_state()
 
 
     def sharpen(self):
@@ -321,7 +322,8 @@ class Processinator:
             self.steps.append("SH")
             self.siril.cmd("pyscript",
                            "CosmicClarity_Sharpen.py")
-            self._save_state()
+            if self.save_each_step:
+                self._save_state()
 
 
     def curves(self):
@@ -354,7 +356,7 @@ class Processinator:
 
         control_points = [
             (0.0, 0.0),
-            (0.07, 0.035), # Pull down shadows
+            (0.07, 0.015), # Pull down shadows
             (0.6, 0.75),   # Boost mid to light mid-tones
             (1.0, 1.0)
         ]
@@ -399,7 +401,8 @@ class Processinator:
             #self.siril.cmd("clahe", "8", "2")
 
         self.steps.append("Adj")
-        self._save_state()
+        if self.save_each_step:
+            self._save_state()
 
     def save_result(self):
         """Save the result file, including step suffix."""
@@ -417,8 +420,9 @@ class Processinator:
         """Save the current state of the image."""
         if INSIDE_SIRIL:
             file_name = self._current_file_name()
+            base_name = os.path.basename(file_name)
 
-            self._update_status(f"Saving result to {file_name}")
+            self._update_status(f"Saving result to {base_name}")
             self.siril.cmd("save", f'"{file_name}"')
         else:
             self._update_status("Saving result")
