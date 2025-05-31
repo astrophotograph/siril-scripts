@@ -55,21 +55,20 @@ class Stackinator:
         self.kernels = ["square", "point", "turbo", "gaussian", "laczos2", "lanczos3"]
         self.max_stack = tk.BooleanVar()
 
-        if INSIDE_SIRIL:
-            self.style = tksiril.standard_style()
+        self.style = tksiril.standard_style()
 
-            self.siril = s.SirilInterface()
-            try:
-                self.siril.connect()
-                slog("Connected to Siril successfully")
-            except SirilConnectionError as e:
-                print(f'Connection failed: {e}')
-                self.error('Failed to connect to Siril')
-                self._dispose()
-                raise RuntimeError('Failed to connect to Siril')
+        self.siril = s.SirilInterface()
+        try:
+            self.siril.connect()
+            slog("Connected to Siril successfully")
+        except SirilConnectionError as e:
+            print(f'Connection failed: {e}')
+            self.error('Failed to connect to Siril')
+            self._dispose()
+            raise RuntimeError('Failed to connect to Siril')
 
-            # todo : check for "process" directory and error if it exists!
-            tksiril.match_theme_to_siril(self.root, self.siril)
+        # todo : check for "process" directory and error if it exists!
+        tksiril.match_theme_to_siril(self.root, self.siril)
 
         self._create_ui()
 
@@ -122,12 +121,7 @@ class Stackinator:
         self.kernel.set(self.kernels[0])
         self.kernel.trace_add("write", lambda *_: self.kernel_combo.set(self.kernel.get()))
         self.kernel_combo.config(textvariable=self.kernel)
-        # self.kernel_combo.config(state="readonly")
         self.kernel_combo.config(width=10)
-        # self.kernel_combo.config(height=2)
-        # self.kernel_combo.config(justify=tk.CENTER)
-        # self.kernel_combo.config(font=("Arial", 12))
-        # self.kernel_combo.config(exportselection=0)
         kernel_box.pack(pady=(0, 10))
 
         # Buttons
@@ -182,8 +176,7 @@ class Stackinator:
     def _dispose(self):
         """Dispose of resources."""
         slog("Shutting down")
-        if INSIDE_SIRIL:
-            self.siril.disconnect()
+        self.siril.disconnect()
         self.root.quit()
         self.root.destroy()
 
@@ -191,30 +184,28 @@ class Stackinator:
         """Convert subframes."""
         self._update_status("Convert subframes")
 
-        if INSIDE_SIRIL:
-            self.siril.cmd("set32bits")
-            # Convert light frames to .FIT files
-            self.siril.cmd("cd", "lights")
-            self.siril.cmd("link", "light", "-out=../process")
-            self.siril.cmd("cd", "../process")
+        self.siril.cmd("set32bits")
+        # Convert light frames to .FIT files
+        self.siril.cmd("cd", "lights")
+        self.siril.cmd("link", "light", "-out=../process")
+        self.siril.cmd("cd", "../process")
 
     def calibration(self):
         """Calibration subframes."""
         self._update_status("Calibrate subframes")
 
-        if INSIDE_SIRIL:
-            # Calibrate light frames
-            self.siril.cmd("setfindstar",
-                           "-sigma=0.1",
-                           "-roundness=0.42",  # Should make this a bit tighter!
-                           "-convergence=3")
-            calibrate_args = ["-debayer"]
-            if self.drizzle.get():
-                calibrate_args = [
-                    "-cfa",
-                    "-equalize_cfa"
-                ]
-            self.siril.cmd("calibrate", "light", *calibrate_args)
+        # Calibrate light frames
+        self.siril.cmd("setfindstar",
+                       "-sigma=0.1",
+                       "-roundness=0.42",  # Should make this a bit tighter!
+                       "-convergence=3")
+        calibrate_args = ["-debayer"]
+        if self.drizzle.get():
+            calibrate_args = [
+                "-cfa",
+                "-equalize_cfa"
+            ]
+        self.siril.cmd("calibrate", "light", *calibrate_args)
 
     def registration(self):
         """Registration of subframes."""
@@ -226,48 +217,45 @@ class Stackinator:
         #
         self._update_status("Register subframes")
 
-        if INSIDE_SIRIL:
-            self.siril.cmd("register",
-                           "pp_light",
-                           "-2pass",
-                           f"-minpairs={self.min_pairs}")
-            seq_args = []
-            if self.drizzle.get():
-                seq_args = [
-                    "-drizzle",
-                    f"-scale={self.scale}",
-                    f"-pixfrac={self.pixfrac}",
-                    f"-kernel={self.kernel.get()}",
-                ]
-            self.siril.cmd("seqapplyreg",
-                           "pp_light",
-                           "-filter-round=2.5k",
-                           *seq_args)
+        self.siril.cmd("register",
+                       "pp_light",
+                       "-2pass",
+                       f"-minpairs={self.min_pairs}")
+        seq_args = []
+        if self.drizzle.get():
+            seq_args = [
+                "-drizzle",
+                f"-scale={self.scale}",
+                f"-pixfrac={self.pixfrac}",
+                f"-kernel={self.kernel.get()}",
+            ]
+        self.siril.cmd("seqapplyreg",
+                       "pp_light",
+                       "-filter-round=2.5k",
+                       *seq_args)
 
     def stack(self):
         """Stack subframes."""
         self._update_status("Stack subframes")
 
-        if INSIDE_SIRIL:
-            self.siril.cmd("stack", "r_pp_light",
-                           "rej", "3", "3",
-                           "-norm=addscale",
-                           "-output_norm",
-                           "-rgb_equal",
-                           "-out=result")
+        self.siril.cmd("stack", "r_pp_light",
+                       "rej", "3", "3",
+                       "-norm=addscale",
+                       "-output_norm",
+                       "-rgb_equal",
+                       "-out=result")
 
     def finalize_stack(self):
         """Finish stacking."""
         self._update_status("Finish stacking")
 
-        if INSIDE_SIRIL:
-            # Flip if required
-            self.siril.cmd("mirrorx_single", "result")
+        # Flip if required
+        self.siril.cmd("mirrorx_single", "result")
 
-            # Save to a different name
-            self.siril.cmd("load", "result")
+        # Save to a different name
+        self.siril.cmd("load", "result")
 
-            self.siril.cmd("cd", "..")
+        self.siril.cmd("cd", "..")
 
 
 def main():
