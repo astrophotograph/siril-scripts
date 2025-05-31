@@ -81,7 +81,6 @@ class Processinator:
             {"name": "color_calibration", "display_name": "Color Calibration", "default": True},
             {"name": "star_separation", "display_name": "Star Separation", "default": False},
             {"name": "stretch", "display_name": "Stretch", "default": True},
-            {"name": "star_recombination", "display_name": "Star Recombination", "default": False},
             {"name": "remove_green", "display_name": "Remove Green", "default": True},
             {"name": "curves", "display_name": "Curves", "default": True},
             {"name": "adjustments", "display_name": "Adjustments", "default": True},
@@ -210,30 +209,6 @@ class Processinator:
         thread = Thread(target=self.runner)
         thread.start()
 
-    def _highlight_step(self, step_name):
-        """Highlight the checkbox for the current step."""
-        if step_name in self.step_checkbuttons:
-            # Reset previous highlight if any
-            if self.active_checkbox:
-                self.step_checkbuttons[self.active_checkbox]["frame"].configure(style="")
-            
-            # Apply highlight to the current step
-            self.step_checkbuttons[step_name]["frame"].configure(style="Highlight.TFrame")
-            self.active_checkbox = step_name
-            
-            # Force update UI
-            self.root.update_idletasks()
-    
-    def _unhighlight_step(self, step_name):
-        """Remove highlighting from the checkbox."""
-        if step_name in self.step_checkbuttons:
-            self.step_checkbuttons[step_name]["frame"].configure(style="")
-            if self.active_checkbox == step_name:
-                self.active_checkbox = None
-            
-            # Force update UI
-            self.root.update_idletasks()
-
     def runner(self):
         try:
             self.close_button["state"] = tk.DISABLED
@@ -245,75 +220,45 @@ class Processinator:
             # Get the save_each_step value from the checkbox
             self.save_each_step = self.save_each_step_var.get()
             
-            # Reset any active highlighting
-            if self.active_checkbox:
-                self._unhighlight_step(self.active_checkbox)
-            
             if self.step_vars["unclip"].get():
-                self._highlight_step("unclip")
                 self.unclip()
-                self._unhighlight_step("unclip")
-                
+
             if self.step_vars["crop"].get():
-                self._highlight_step("crop")
                 self.crop(0.01)
-                self._unhighlight_step("crop")
-                
+
             if self.step_vars["background_extraction"].get():
-                self._highlight_step("background_extraction")
                 self.background_extraction(tolerance=2.0)
-                self._unhighlight_step("background_extraction")
-                
+
             if self.step_vars["plate_solve"].get():
-                self._highlight_step("plate_solve")
                 self.plate_solve()
-                self._unhighlight_step("plate_solve")
-                
+
             if self.step_vars["color_calibration"].get():
-                self._highlight_step("color_calibration")
                 self.color_calibration()
-                self._unhighlight_step("color_calibration")
-                
+
             if self.step_vars["star_separation"].get():
-                self._highlight_step("star_separation")
                 self.star_separation()
-                self._unhighlight_step("star_separation")
-                
+
             if self.step_vars["stretch"].get():
-                self._highlight_step("stretch")
                 self.stretch()
-                self._unhighlight_step("stretch")
-                
-            if self.step_vars["star_recombination"].get():
-                self._highlight_step("star_recombination")
+
+            if self.step_vars["star_separation"].get():
                 self.star_recombination(8.5)
-                self._unhighlight_step("star_recombination")
-                
+
             if self.step_vars["remove_green"].get():
-                self._highlight_step("remove_green")
                 self.remove_green()
-                self._unhighlight_step("remove_green")
-                
+
             if self.step_vars["curves"].get():
-                self._highlight_step("curves")
                 self.curves()
-                self._unhighlight_step("curves")
-                
+
             if self.step_vars["adjustments"].get():
-                self._highlight_step("adjustments")
                 self.adjustments()
-                self._unhighlight_step("adjustments")
-                
+
             if self.step_vars["denoise"].get():
-                self._highlight_step("denoise")
                 self.denoise()
-                self._unhighlight_step("denoise")
-                
+
             if self.step_vars["sharpen"].get():
-                self._highlight_step("sharpen")
                 self.sharpen()
-                self._unhighlight_step("sharpen")
-                
+
             self.save_result()
         finally:
             self.close_button["state"] = tk.NORMAL
