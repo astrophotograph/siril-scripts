@@ -54,63 +54,6 @@ from scipy.interpolate import CubicSpline
 
 slog = partial(print, f'{NAME}:')
 
-class StyledCheckbutton(ttk.Checkbutton):
-    """Checkbutton that can be highlighted."""
-    
-    def __init__(self, parent, **kwargs):
-        """Initialize with parent and kwargs."""
-        self.highlight_color = kwargs.pop('highlight_color', '#4CAF50')  # Default to green
-        self.normal_frame = ttk.Frame(parent)
-        self.highlight_frame = ttk.Frame(parent, style='Highlight.TFrame')
-        
-        super().__init__(self.normal_frame, **kwargs)
-        self.pack(fill=tk.BOTH, expand=True)
-        
-        # Keep track of which frame is currently showing
-        self.highlighted = False
-        
-    def grid(self, **kwargs):
-        """Place the outer frame in the grid."""
-        self.normal_frame.grid(**kwargs)
-        self.grid_kwargs = kwargs
-        
-    def highlight(self):
-        """Highlight the checkbox."""
-        if not self.highlighted:
-            # Create style for highlighted frame if it doesn't exist
-            self.normal_frame.grid_forget()
-            
-            # Copy original widget to highlighted frame
-            if not hasattr(self, 'highlighted_widget'):
-                self.highlighted_widget = ttk.Checkbutton(
-                    self.highlight_frame,
-                    text=self['text'],
-                    variable=self['variable'],
-                    command=self['command']
-                )
-                self.highlighted_widget.pack(fill=tk.BOTH, expand=True)
-            
-            # Set background color of highlight frame
-            self.highlight_frame.configure(style='Highlight.TFrame')
-            
-            # Show highlighted frame in place of normal frame
-            self.highlight_frame.grid(**self.grid_kwargs)
-            self.highlighted = True
-            
-            # Update UI
-            self.highlight_frame.update()
-    
-    def unhighlight(self):
-        """Remove highlighting."""
-        if self.highlighted:
-            self.highlight_frame.grid_forget()
-            self.normal_frame.grid(**self.grid_kwargs)
-            self.highlighted = False
-            
-            # Update UI
-            self.normal_frame.update()
-
-
 class Processinator:
     """Processinator."""
 
@@ -124,6 +67,7 @@ class Processinator:
         self.steps = []
         self.width = None
         self.height = None
+        self.active_checkbox = None
         
         # Settings variables
         self.save_each_step_var = tk.BooleanVar(value=True)
@@ -137,6 +81,7 @@ class Processinator:
             {"name": "color_calibration", "display_name": "Color Calibration", "default": True},
             {"name": "star_separation", "display_name": "Star Separation", "default": False},
             {"name": "stretch", "display_name": "Stretch", "default": True},
+            {"name": "star_recombination", "display_name": "Star Recombination", "default": False},
             {"name": "remove_green", "display_name": "Remove Green", "default": True},
             {"name": "curves", "display_name": "Curves", "default": True},
             {"name": "adjustments", "display_name": "Adjustments", "default": True},
@@ -172,9 +117,9 @@ class Processinator:
         main = ttk.Frame(self.root, padding=10)
         main.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
 
-        # Create a custom style for highlighted checkboxes
-        self.root.tk.call("ttk::style", "configure", "Highlight.TFrame", 
-                         background="#4CAF50")  # Green background
+        # Create a style for highlighted frame (without keyword args)
+        style = ttk.Style()
+        style.configure("Highlight.TFrame", background="#4CAF50")  # Green background
 
         title = ttk.Label(main, text="Process ALL the images", style="Header.TLabel")
         title.pack(pady=(0, 20))
@@ -202,16 +147,20 @@ class Processinator:
             row = i % (len(self.step_configs) // columns + (1 if len(self.step_configs) % columns > 0 else 0))
             col = i // (len(self.step_configs) // columns + (1 if len(self.step_configs) % columns > 0 else 0))
             
-            # Create a custom checkbutton that can be highlighted
-            cb = StyledCheckbutton(
-                self.steps_frame, 
+            # Create checkbox with frame for highlighting
+            frame = ttk.Frame(self.steps_frame)
+            frame.grid(row=row, column=col, sticky=tk.W, padx=5, pady=2)
+            
+            # Create the checkbox inside the frame
+            cb = ttk.Checkbutton(
+                frame, 
                 text=step["display_name"], 
                 variable=self.step_vars[step["name"]]
             )
-            cb.grid(row=row, column=col, sticky=tk.W, padx=5, pady=2)
+            cb.pack(anchor=tk.W)
             
-            # Store reference to the checkbox widget
-            self.step_checkbuttons[step["name"]] = cb
+            # Store reference to the checkbox and its frame
+            self.step_checkbuttons[step["name"]] = {"checkbox": cb, "frame": frame}
 
         # Buttons
         buttons = Frame(main)
@@ -261,6 +210,30 @@ class Processinator:
         thread = Thread(target=self.runner)
         thread.start()
 
+    def _highlight_step(self, step_name):
+        """Highlight the checkbox for the current step."""
+        if step_name in self.step_checkbuttons:
+            # Reset previous highlight if any
+            if self.active_checkbox:
+                self.step_checkbuttons[self.active_checkbox]["frame"].configure(style="")
+            
+            # Apply highlight to the current step
+            self.step_checkbuttons[step_name]["frame"].configure(style="Highlight.TFrame")
+            self.active_checkbox = step_name
+            
+            # Force update UI
+            self.root.update_idletasks()
+    
+    def _unhighlight_step(self, step_name):
+        """Remove highlighting from the checkbox."""
+        if step_name in self.step_checkbuttons:
+            self.step_checkbuttons[step_name]["frame"].configure(style="")
+            if self.active_checkbox == step_name:
+                self.active_checkbox = None
+            
+            # Force update UI
+            self.root.update_idletasks()
+
     def runner(self):
         try:
             self.close_button["state"] = tk.DISABLED
@@ -272,9 +245,9 @@ class Processinator:
             # Get the save_each_step value from the checkbox
             self.save_each_step = self.save_each_step_var.get()
             
-            # Reset all highlights
-            for step_name, cb in self.step_checkbuttons.items():
-                cb.unhighlight()
+            # Reset any active highlighting
+            if self.active_checkbox:
+                self._unhighlight_step(self.active_checkbox)
             
             if self.step_vars["unclip"].get():
                 self._highlight_step("unclip")
@@ -311,7 +284,7 @@ class Processinator:
                 self.stretch()
                 self._unhighlight_step("stretch")
                 
-            if self.step_vars["star_separation"].get():
+            if self.step_vars["star_recombination"].get():
                 self._highlight_step("star_recombination")
                 self.star_recombination(8.5)
                 self._unhighlight_step("star_recombination")
@@ -346,20 +319,6 @@ class Processinator:
             self.close_button["state"] = tk.NORMAL
             self.process_button["state"] = tk.NORMAL
             self._update_status("Done")
-    
-    def _highlight_step(self, step_name):
-        """Highlight the checkbox for the current step."""
-        if step_name in self.step_checkbuttons:
-            self.step_checkbuttons[step_name].highlight()
-            # Force update UI
-            self.root.update_idletasks()
-    
-    def _unhighlight_step(self, step_name):
-        """Remove highlighting from the checkbox."""
-        if step_name in self.step_checkbuttons:
-            self.step_checkbuttons[step_name].unhighlight()
-            # Force update UI
-            self.root.update_idletasks()
 
     def unclip(self):
         """Unclip stars."""
