@@ -117,9 +117,9 @@ class Processinator:
         main = ttk.Frame(self.root, padding=10)
         main.pack(fill=tk.BOTH, expand=True, padx=0, pady=0)
 
-        # Create a style for highlighted frame (without keyword args)
-        style = ttk.Style()
-        style.configure("Highlight.TFrame", background="#4CAF50")  # Green background
+        # Define highlight color
+        self.highlight_color = "#4CAF50"  # Green color
+        self.normal_color = self.root.cget("background")  # Get the default background color
 
         title = ttk.Label(main, text="Process ALL the images", style="Header.TLabel")
         title.pack(pady=(0, 20))
