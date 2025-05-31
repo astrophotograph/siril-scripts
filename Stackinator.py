@@ -48,9 +48,10 @@ class Stackinator:
 
         # Default stacking parameters
         self.drizzle = tk.BooleanVar()
-        self.scale = "2.0"
+        self.scale = tk.StringVar(value="2.0")  # Changed to StringVar
+        self.scales = ["1.0", "2.0", "3.0"]  # Available scale values
         self.pixfrac = "0.5"
-        self.min_pairs = "10"
+        self.min_pairs = tk.StringVar(value="10")  # Changed to StringVar
         self.kernel = tk.StringVar()
         self.kernels = ["square", "point", "turbo", "gaussian", "laczos2", "lanczos3"]
         self.max_stack = tk.BooleanVar()
@@ -83,8 +84,10 @@ class Stackinator:
         """Handle drizzle checkbox change."""
         if self.drizzle.get():
             self.kernel_combo["state"] = tk.NORMAL
+            self.scale_combo["state"] = tk.NORMAL
         else:
             self.kernel_combo["state"] = tk.DISABLED
+            self.scale_combo["state"] = tk.DISABLED
 
     def _create_ui(self):
         """Create the UI."""
@@ -111,6 +114,25 @@ class Stackinator:
         drizzle.pack(pady=(0, 20))
         self.drizzle.set(True)
 
+        # Min pairs - numeric entry
+        min_pairs_box = ttk.Frame(main)
+        min_pairs_label = ttk.Label(min_pairs_box, text="Min Pairs")
+        min_pairs_label.pack(side=tk.LEFT)
+        min_pairs_spinbox = ttk.Spinbox(min_pairs_box, from_=1, to=100, 
+                                        textvariable=self.min_pairs, width=5)
+        min_pairs_spinbox.pack(side=tk.RIGHT)
+        min_pairs_box.pack(pady=(0, 10))
+
+        # Scale dropdown when drizzle is checked
+        scale_box = ttk.Frame(main)
+        scale_label = ttk.Label(scale_box, text="Scale")
+        scale_label.pack(side=tk.LEFT)
+        self.scale_combo = ttk.Combobox(scale_box, values=self.scales, 
+                                        textvariable=self.scale, width=5)
+        self.scale_combo.pack(side=tk.RIGHT)
+        scale_box.pack(pady=(0, 10))
+
+        # Kernel dropdown
         kernel_box = ttk.Frame(main)
         kernel_label = ttk.Label(kernel_box, text="Kernel")
         kernel_label.pack(side=tk.LEFT)
@@ -140,6 +162,8 @@ class Stackinator:
         if INSIDE_SIRIL:
             tksiril.create_tooltip(self.stack_button, "Start stacking")
             tksiril.create_tooltip(self.close_button, "Quit the application")
+            tksiril.create_tooltip(min_pairs_spinbox, "Minimum number of star pairs to use for alignment")
+            tksiril.create_tooltip(self.scale_combo, "Image scale factor for drizzle")
 
     def _update_status(self, text: str) -> None:
         """Update the status bar."""
@@ -154,7 +178,7 @@ class Stackinator:
     def process_sequence(self):
         """Stack subframes."""
         slog(
-            f"Starting to stack. drizzle={self.drizzle.get()} scale={self.scale} pixfrac={self.pixfrac} min_pairs={self.min_pairs} kernel={self.kernel.get()}")
+            f"Starting to stack. drizzle={self.drizzle.get()} scale={self.scale.get()} pixfrac={self.pixfrac} min_pairs={self.min_pairs.get()} kernel={self.kernel.get()}")
 
         thread = Thread(target=self.runner)
         thread.start()
@@ -220,12 +244,12 @@ class Stackinator:
         self.siril.cmd("register",
                        "pp_light",
                        "-2pass",
-                       f"-minpairs={self.min_pairs}")
+                       f"-minpairs={self.min_pairs.get()}")
         seq_args = []
         if self.drizzle.get():
             seq_args = [
                 "-drizzle",
-                f"-scale={self.scale}",
+                f"-scale={self.scale.get()}",
                 f"-pixfrac={self.pixfrac}",
                 f"-kernel={self.kernel.get()}",
             ]
