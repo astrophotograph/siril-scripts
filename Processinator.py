@@ -67,20 +67,27 @@ class Processinator:
         self.width = None
         self.height = None
         self.save_each_step = True
-
-        # Step control variables
-        self.enable_unclip = tk.BooleanVar(value=True)
-        self.enable_crop = tk.BooleanVar(value=True)
-        self.enable_background_extraction = tk.BooleanVar(value=True)
-        self.enable_plate_solve = tk.BooleanVar(value=True)
-        self.enable_color_calibration = tk.BooleanVar(value=True)
-        self.enable_star_separation = tk.BooleanVar(value=False)
-        self.enable_stretch = tk.BooleanVar(value=True)
-        self.enable_remove_green = tk.BooleanVar(value=True)
-        self.enable_curves = tk.BooleanVar(value=True)
-        self.enable_adjustments = tk.BooleanVar(value=True)
-        self.enable_denoise = tk.BooleanVar(value=True)
-        self.enable_sharpen = tk.BooleanVar(value=True)
+        
+        # Define processing steps configuration
+        self.step_configs = [
+            {"name": "unclip", "display_name": "Unclip Stars", "default": True},
+            {"name": "crop", "display_name": "Crop", "default": True},
+            {"name": "background_extraction", "display_name": "Background Extraction", "default": True},
+            {"name": "plate_solve", "display_name": "Plate Solve", "default": True},
+            {"name": "color_calibration", "display_name": "Color Calibration", "default": True},
+            {"name": "star_separation", "display_name": "Star Separation", "default": False},
+            {"name": "stretch", "display_name": "Stretch", "default": True},
+            {"name": "remove_green", "display_name": "Remove Green", "default": True},
+            {"name": "curves", "display_name": "Curves", "default": True},
+            {"name": "adjustments", "display_name": "Adjustments", "default": True},
+            {"name": "denoise", "display_name": "Denoise", "default": True},
+            {"name": "sharpen", "display_name": "Sharpen", "default": True},
+        ]
+        
+        # Create boolean variables for each step
+        self.step_vars = {}
+        for step in self.step_configs:
+            self.step_vars[step["name"]] = tk.BooleanVar(value=step["default"])
 
         if INSIDE_SIRIL:
             self.style = tksiril.standard_style()
@@ -111,20 +118,19 @@ class Processinator:
         steps_frame = ttk.LabelFrame(main, text="Processing Steps")
         steps_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
         
-        # Create checkboxes for each step
-        ttk.Checkbutton(steps_frame, text="Unclip Stars", variable=self.enable_unclip).grid(row=0, column=0, sticky=tk.W, padx=5, pady=2)
-        ttk.Checkbutton(steps_frame, text="Crop", variable=self.enable_crop).grid(row=1, column=0, sticky=tk.W, padx=5, pady=2)
-        ttk.Checkbutton(steps_frame, text="Background Extraction", variable=self.enable_background_extraction).grid(row=2, column=0, sticky=tk.W, padx=5, pady=2)
-        ttk.Checkbutton(steps_frame, text="Plate Solve", variable=self.enable_plate_solve).grid(row=3, column=0, sticky=tk.W, padx=5, pady=2)
-        ttk.Checkbutton(steps_frame, text="Color Calibration", variable=self.enable_color_calibration).grid(row=4, column=0, sticky=tk.W, padx=5, pady=2)
-        ttk.Checkbutton(steps_frame, text="Star Separation", variable=self.enable_star_separation).grid(row=5, column=0, sticky=tk.W, padx=5, pady=2)
+        # Calculate columns based on the number of steps
+        columns = 2  # Set number of columns
         
-        ttk.Checkbutton(steps_frame, text="Stretch", variable=self.enable_stretch).grid(row=0, column=1, sticky=tk.W, padx=5, pady=2)
-        ttk.Checkbutton(steps_frame, text="Remove Green", variable=self.enable_remove_green).grid(row=2, column=1, sticky=tk.W, padx=5, pady=2)
-        ttk.Checkbutton(steps_frame, text="Curves", variable=self.enable_curves).grid(row=3, column=1, sticky=tk.W, padx=5, pady=2)
-        ttk.Checkbutton(steps_frame, text="Adjustments", variable=self.enable_adjustments).grid(row=4, column=1, sticky=tk.W, padx=5, pady=2)
-        ttk.Checkbutton(steps_frame, text="Denoise", variable=self.enable_denoise).grid(row=5, column=1, sticky=tk.W, padx=5, pady=2)
-        ttk.Checkbutton(steps_frame, text="Sharpen", variable=self.enable_sharpen).grid(row=6, column=1, sticky=tk.W, padx=5, pady=2)
+        # Create checkboxes for each step with automatic row/column calculation
+        for i, step in enumerate(self.step_configs):
+            row = i % (len(self.step_configs) // columns + (1 if len(self.step_configs) % columns > 0 else 0))
+            col = i // (len(self.step_configs) // columns + (1 if len(self.step_configs) % columns > 0 else 0))
+            
+            ttk.Checkbutton(
+                steps_frame, 
+                text=step["display_name"], 
+                variable=self.step_vars[step["name"]]
+            ).grid(row=row, column=col, sticky=tk.W, padx=5, pady=2)
 
         # Buttons
         buttons = Frame(main)
@@ -178,43 +184,43 @@ class Processinator:
             self.close_button["state"] = tk.DISABLED
             self.process_button["state"] = tk.DISABLED
             
-            if self.enable_unclip.get():
+            if self.step_vars["unclip"].get():
                 self.unclip()
                 
-            if self.enable_crop.get():
+            if self.step_vars["crop"].get():
                 self.crop(0.01)
                 
-            if self.enable_background_extraction.get():
+            if self.step_vars["background_extraction"].get():
                 self.background_extraction(tolerance=2.0)
                 
-            if self.enable_plate_solve.get():
+            if self.step_vars["plate_solve"].get():
                 self.plate_solve()
                 
-            if self.enable_color_calibration.get():
+            if self.step_vars["color_calibration"].get():
                 self.color_calibration()
                 
-            if self.enable_star_separation.get():
+            if self.step_vars["star_separation"].get():
                 self.star_separation()
                 
-            if self.enable_stretch.get():
+            if self.step_vars["stretch"].get():
                 self.stretch()
                 
-            if self.enable_star_separation.get():
+            if self.step_vars["star_separation"].get():
                 self.star_recombination(8.5)
                 
-            if self.enable_remove_green.get():
+            if self.step_vars["remove_green"].get():
                 self.remove_green()
                 
-            if self.enable_curves.get():
+            if self.step_vars["curves"].get():
                 self.curves()
                 
-            if self.enable_adjustments.get():
+            if self.step_vars["adjustments"].get():
                 self.adjustments()
                 
-            if self.enable_denoise.get():
+            if self.step_vars["denoise"].get():
                 self.denoise()
                 
-            if self.enable_sharpen.get():
+            if self.step_vars["sharpen"].get():
                 self.sharpen()
                 
             self.save_result()
