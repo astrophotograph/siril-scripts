@@ -23,6 +23,7 @@
 # - heuristics for type of object
 # - heuristics for Bortle
 # - heuristics for phase of moon
+# - tunable values for different steps, where applicable
 #
 from pathlib import Path
 from threading import Thread
@@ -67,6 +68,9 @@ class Processinator:
         self.width = None
         self.height = None
         self.save_each_step = True
+        
+        # Settings variables
+        self.save_each_step_var = tk.BooleanVar(value=True)
         
         # Define processing steps configuration
         self.step_configs = [
@@ -114,6 +118,17 @@ class Processinator:
         title = ttk.Label(main, text="Process ALL the images", style="Header.TLabel")
         title.pack(pady=(0, 20))
 
+        # Settings Frame
+        settings_frame = ttk.LabelFrame(main, text="Settings")
+        settings_frame.pack(fill=tk.X, expand=False, pady=(0, 10))
+        
+        # Save each step checkbox
+        ttk.Checkbutton(
+            settings_frame, 
+            text="Save intermediate image after each step",
+            variable=self.save_each_step_var
+        ).pack(anchor=tk.W, padx=5, pady=5)
+
         # Processing Steps Frame
         steps_frame = ttk.LabelFrame(main, text="Processing Steps")
         steps_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
@@ -146,6 +161,7 @@ class Processinator:
 
         if INSIDE_SIRIL:
             tksiril.create_tooltip(self.close_button, "Quit the application")
+            tksiril.create_tooltip(self.process_button, "Start processing the current image")
 
     def _dispose(self):
         """Dispose of resources."""
@@ -183,6 +199,12 @@ class Processinator:
         try:
             self.close_button["state"] = tk.DISABLED
             self.process_button["state"] = tk.DISABLED
+            
+            # Reset steps list at the beginning of processing
+            self.steps = []
+            
+            # Get the save_each_step value from the checkbox
+            self.save_each_step = self.save_each_step_var.get()
             
             if self.step_vars["unclip"].get():
                 self.unclip()
