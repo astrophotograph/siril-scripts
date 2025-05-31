@@ -101,54 +101,53 @@ class Stackinator:
                           font=("Arial", 24, "bold"))
         title.pack(pady=(0, 20))
 
-        # Parameters
-        drizzle = ttk.Checkbutton(main,
-                                  text="Drizzle",
-                                  variable=self.drizzle,
-                                  # height=2,
-                                  width=10,
-                                  onvalue=True,
-                                  offvalue=False,
-                                  command=self.on_drizzle_change
-                                  )
-        drizzle.pack(pady=(0, 20))
+        # Create Drizzle LabelFrame
+        drizzle_frame = ttk.LabelFrame(main, text="Drizzle", padding=10)
+        drizzle_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        # Drizzle checkbox inside the LabelFrame
+        drizzle_cb = ttk.Checkbutton(drizzle_frame,
+                                     text="Enable Drizzle",
+                                     variable=self.drizzle,
+                                     onvalue=True,
+                                     offvalue=False,
+                                     command=self.on_drizzle_change)
+        drizzle_cb.grid(row=0, column=0, sticky=tk.W, pady=5)
         self.drizzle.set(True)
 
-        # Min pairs - numeric entry
-        min_pairs_box = ttk.Frame(main)
-        min_pairs_label = ttk.Label(min_pairs_box, text="Min Pairs")
-        min_pairs_label.pack(side=tk.LEFT)
-        min_pairs_spinbox = ttk.Spinbox(min_pairs_box, from_=1, to=100, 
-                                        textvariable=self.min_pairs, width=5)
-        min_pairs_spinbox.pack(side=tk.RIGHT)
-        min_pairs_box.pack(pady=(0, 10))
+        # Scale dropdown inside the LabelFrame
+        scale_label = ttk.Label(drizzle_frame, text="Scale:")
+        scale_label.grid(row=1, column=0, sticky=tk.W, pady=2)
+        self.scale_combo = ttk.Combobox(drizzle_frame, values=self.scales, 
+                                       textvariable=self.scale, width=5)
+        self.scale_combo.grid(row=1, column=1, sticky=tk.W, pady=2)
 
-        # Scale dropdown when drizzle is checked
-        scale_box = ttk.Frame(main)
-        scale_label = ttk.Label(scale_box, text="Scale")
-        scale_label.pack(side=tk.LEFT)
-        self.scale_combo = ttk.Combobox(scale_box, values=self.scales, 
-                                        textvariable=self.scale, width=5)
-        self.scale_combo.pack(side=tk.RIGHT)
-        scale_box.pack(pady=(0, 10))
-
-        # Kernel dropdown
-        kernel_box = ttk.Frame(main)
-        kernel_label = ttk.Label(kernel_box, text="Kernel")
-        kernel_label.pack(side=tk.LEFT)
-        self.kernel_combo = ttk.Combobox(kernel_box, values=self.kernels)
-        self.kernel_combo.pack(side=tk.RIGHT)
+        # Kernel dropdown inside the LabelFrame
+        kernel_label = ttk.Label(drizzle_frame, text="Kernel:")
+        kernel_label.grid(row=2, column=0, sticky=tk.W, pady=2)
+        self.kernel_combo = ttk.Combobox(drizzle_frame, values=self.kernels)
+        self.kernel_combo.grid(row=2, column=1, sticky=tk.W, pady=2)
         self.kernel_combo.current(0)
         self.kernel_combo.bind("<<ComboboxSelected>>", lambda _: self.kernel.set(self.kernel_combo.get()))
         self.kernel.set(self.kernels[0])
         self.kernel.trace_add("write", lambda *_: self.kernel_combo.set(self.kernel.get()))
         self.kernel_combo.config(textvariable=self.kernel)
         self.kernel_combo.config(width=10)
-        kernel_box.pack(pady=(0, 10))
+
+        # Create Settings LabelFrame
+        settings_frame = ttk.LabelFrame(main, text="Settings", padding=10)
+        settings_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        # Min pairs numeric entry inside the Settings LabelFrame
+        min_pairs_label = ttk.Label(settings_frame, text="Min Pairs:")
+        min_pairs_label.grid(row=0, column=0, sticky=tk.W, pady=2)
+        min_pairs_spinbox = ttk.Spinbox(settings_frame, from_=1, to=100, 
+                                        textvariable=self.min_pairs, width=5)
+        min_pairs_spinbox.grid(row=0, column=1, sticky=tk.W, pady=2)
 
         # Buttons
         buttons = ttk.Frame(main)
-        buttons.pack(pady=(0, 10))
+        buttons.pack(pady=(10, 10))
         self.stack_button = ttk.Button(buttons, text="Stack", command=self.process_sequence)
         self.stack_button.pack(side=tk.RIGHT)
 
@@ -159,21 +158,17 @@ class Stackinator:
         self.status = ttk.Label(main, text="Ready", style="Status.TLabel")
         self.status.pack(pady=(0, 0))
 
-        if INSIDE_SIRIL:
-            tksiril.create_tooltip(self.stack_button, "Start stacking")
-            tksiril.create_tooltip(self.close_button, "Quit the application")
-            tksiril.create_tooltip(min_pairs_spinbox, "Minimum number of star pairs to use for alignment")
-            tksiril.create_tooltip(self.scale_combo, "Image scale factor for drizzle")
+        tksiril.create_tooltip(self.stack_button, "Start stacking")
+        tksiril.create_tooltip(self.close_button, "Quit the application")
+        tksiril.create_tooltip(min_pairs_spinbox, "Minimum number of star pairs to use for alignment")
+        tksiril.create_tooltip(self.scale_combo, "Image scale factor for drizzle")
+        tksiril.create_tooltip(self.kernel_combo, "Kernel type for drizzle")
 
     def _update_status(self, text: str) -> None:
         """Update the status bar."""
         if self.root:
             self.status.config(text=text)
         slog(text)
-
-        if not INSIDE_SIRIL:
-            # for debugging only
-            sleep(2)
 
     def process_sequence(self):
         """Stack subframes."""
